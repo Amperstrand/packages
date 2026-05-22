@@ -52,6 +52,14 @@ base_grant_url="$(printf "%s" "${redirect_url}" 2>/dev/null | "${trm_awkcmd}" '
 }')"
 [ -z "${base_grant_url}" ] && exit 2
 
+# validate that extracted URL is actually http(s) — handles edge cases
+# where captive portals return unexpected redirect targets
+#
+case "${base_grant_url}" in
+	http://*|https://*) ;;
+	*) exit 2 ;;
+esac
+
 # hit the grant URL directly (bypasses splash page)
 #
 raw_html="$("${trm_fetch}" ${trm_fetchparm} --user-agent "${trm_useragent}" "${base_grant_url}?continue_url=http://google.com/&duration=86400")"

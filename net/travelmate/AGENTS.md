@@ -113,104 +113,43 @@ fi
 # Exit codes: 0 = success, 1-254 = specific failure, 255 = generic failure
 ```
 
-## Available travelmate Variables
+## Defensive Coding Guidelines
 
-| Variable | Description |
-|---|---|
-| `${trm_fetch}` | curl binary path |
-| `${trm_fetchparm}` | default curl parameters |
-| `${trm_useragent}` | user agent string |
-| `${trm_lookupcmd}` | DNS lookup command |
-| `${trm_awkcmd}` | awk binary (use this, not raw `awk`) |
-| `${trm_jsoncmd}` | jsonfilter binary (OpenWrt's JSON parser) |
-| `${trm_sortcmd}` | sort binary |
-| `${trm_captiveurl}` | URL used for captive detection |
+When writing login scripts, apply these practices to handle edge cases from
+unpredictable captive portal behavior:
 
-## Captive Portal Taxonomy
+### Validate extracted URLs
 
-Different portals need different approaches:
+Before passing an extracted URL to curl, confirm it starts with `http://` or
+`https://`. Some captive portals return malformed or empty redirect targets:
 
-### Type 1: Click-through (simplest)
-Just need the grant URL. Hit it with `continue_url` param and you're in.
-Examples: Meraki, many hotel portals
-
-### Type 2: Form POST
-Need to extract a form action URL and POST credentials (or empty form).
-Extract CSRF tokens from cookies/HTML first.
-Examples: Deutsche Bahn (wifibahn), many European providers
-
-### Type 3: OAuth/redirect chain
-Multiple redirects through an identity provider. May need cookies.
-Follow each redirect, extract session tokens.
-Examples: Some enterprise guest networks
-
-### Type 4: JavaScript-rendered
-The splash page requires JavaScript execution to submit.
-Cannot be handled by curl alone — needs browser automation or finding the underlying API endpoint.
-Examples: Some modern captive portals
-
-### Type 5: Credentials required
-Requires username/password (hotel room number, etc.)
-Use `script_args` in travelmate config to pass credentials.
-Template: `generic-user-pass.login`
-
-## Prompt Templates for AI Capture
-
-### Template: Initial Discovery
-
-```
-I'm connected to SSID "[SSID]" which has a captive portal.
-
-Using Playwright, please:
-1. Navigate to http://captive.apple.com
-2. Capture ALL network requests and responses (headers + bodies)
-3. Follow all redirects until the splash page loads
-4. Take a screenshot of the splash page
-5. Dump the page HTML
-
-Return:
-- Ordered list of all URLs visited (redirect chain)
-- For each URL: method, status code, Location header (if redirect), Content-Type
-- Splash page HTML
-- Screenshot description
+```sh
+case "${extracted_url}" in
+    http://*|https://*) ;;
+    *) exit 2 ;;
+esac
 ```
 
-### Template: Auth Flow Capture
+### Validate extracted hostnames
 
-```
-The splash page is [description]. I need to [click "Continue" / fill form / etc.].
+If extracting a domain name from a redirect, confirm it only contains valid
+hostname characters (alphanumeric, dots, hyphens). This prevents issues with
+malformed Location headers:
 
-Using Playwright:
-1. On the current splash page, find the [button/form element]
-2. Start network capture
-3. Click/submit
-4. Capture ALL network activity during and after the click
-5. Wait for redirect to complete
-6. Verify by fetching http://captive.apple.com
-
-Return:
-- The exact URL that granted access (the "grant URL")
-- All parameters in that URL
-- Any cookies set
-- Whether verification succeeded
+```sh
+case "${domain}" in
+    *[!a-zA-Z0-9._-]*) exit 1 ;;
+esac
 ```
 
-### Template: Script Generation
+### Sanitize tokens before use in headers
 
-```
-From the captured traffic below, generate a travelmate-compatible .login script.
+Strip newlines and control characters from any value used in curl
+`--header` arguments. While modern curl rejects multi-line headers,
+this is a safe practice for compatibility with older versions:
 
-Rules:
-- Must be /bin/sh (POSIX), NOT bash
-- Must use only: ${trm_fetch}, ${trm_fetchparm}, ${trm_useragent}, ${trm_lookupcmd}, ${trm_awkcmd}, ${trm_jsoncmd}, ${trm_sortcmd}, ${trm_captiveurl}
-- Must NOT use python3, perl, or any non-busybox tools
-- Must source /usr/lib/travelmate-functions.sh
-- Must handle errors with appropriate exit codes
-- Keep it under 60 lines
-- GPL v3 license header
-
-Captured data:
-[paste redirect chain, splash HTML, grant URL, cookies]
+```sh
+token="$(printf "%s" "${token}" | tr -d '\000-\037\177')"
 ```
 
 ## Branch Structure

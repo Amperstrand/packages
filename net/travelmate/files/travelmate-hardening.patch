@@ -1,0 +1,49 @@
+--- a/net/travelmate/files/travelmate-functions.sh
++++ b/net/travelmate/files/travelmate-functions.sh
+@@ -87,6 +87,17 @@ trm_captiveurl="http://detectportal.firefox.com"
+ # ensure runtime directory exists
+ #
+ [ ! -d "${trm_rundir}" ] && mkdir -p "${trm_rundir}"
++
++# sanitize external input — strips control characters and quotes.
++# used before passing SSIDs, domain names, and other externally-sourced
++# data to UCI commands. handles edge cases from unusual SSIDs (embedded
++# control chars) and malformed redirect URLs.
++#
++f_sanitize() {
++	printf "%s" "${1}" | tr -d '\000-\037\177' | tr -d '"'"'"
++}
++
+ # gather system information
+ #
+ f_system() {
+@@ -395,6 +406,12 @@ f_addsta() {
+ 	*) return ;;
+ 	esac
+ 
++	# sanitize SSID — strip control characters (some drivers report
++	# garbage during scans) and enforce 802.11 max length of 32 chars
++	#
++	essid="$(f_sanitize "${essid}")"
++	[ ${#essid} -gt 32 ] || [ -z "${essid}" ] && return 0
++
+ 	# ssid filter: skip if essid matches any pattern in trm_ssidfilter
+ 	#
+ 	for pattern in ${trm_ssidfilter}; do
+@@ -536,6 +553,14 @@ f_check() {
+ 								while :; do
+ 									cp_domain="$(printf "%s" "${result}" | "${trm_awkcmd}" -F '['\''| ]' '/^net cp/{printf "%s",$4}')"
+ 									if [ ! -x "/etc/init.d/dnsmasq" ] || [ ! -f "/etc/config/dhcp" ] || [ -z "${cp_domain}" ]; then
+ 										break
+ 									fi
++
++									# validate domain — only allow valid hostname characters.
++									# some captive portals return malformed redirect targets
++									#
++									case "${cp_domain}" in
++										*[!a-zA-Z0-9._-]*) break ;;
++									esac
++
+ 									case " $(uci_get "dhcp" "@dnsmasq[0]" "rebind_domain") " in
+ 									*" ${cp_domain} "*) break ;;
+ 									esac
