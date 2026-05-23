@@ -27,7 +27,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install host dependencies
         run: |
@@ -58,7 +58,7 @@ jobs:
 
       - name: Cache extracted SDK
         id: cache-sdk
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ steps.sdk.outputs.sdk_dir }}
           key: sdk-${{ steps.sdk.outputs.sdk_file }}-v1
@@ -141,7 +141,7 @@ jobs:
 
       - name: Upload packages
         if: steps.collect.outputs.pkg_count > 0
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: er6p-poe-openwrt-${{ env.OPENWRT_VERSION }}
           path: output/*
@@ -152,7 +152,7 @@ jobs:
         if: >-
           startsWith(github.ref, 'refs/tags/v') &&
           steps.collect.outputs.pkg_count > 0
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: output/*
           generate_release_notes: true
