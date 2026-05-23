@@ -95,12 +95,20 @@ jobs:
           ln -sfn "${{ github.workspace }}/net/${PACKAGE_NAME}" "${SDK_DIR}/package/${PACKAGE_NAME}"
           echo "Linked net/${PACKAGE_NAME} -> ${SDK_DIR}/package/${PACKAGE_NAME}"
 
+      - name: Enable package in SDK config
+        working-directory: ${{ steps.sdk.outputs.sdk_dir }}
+        run: |
+          # Enable both kernel module and userspace packages in the SDK config
+          echo "CONFIG_PACKAGE_kmod-er6p-poe=y" >> .config
+          echo "CONFIG_PACKAGE_er6p-poe=y" >> .config
+          make defconfig
+
       - name: Build package
         id: compile
         working-directory: ${{ steps.sdk.outputs.sdk_dir }}
         run: |
+          set -o pipefail
           make "package/${PACKAGE_NAME}/compile" V=s 2>&1 | tee build.log
-          echo "Build exited with code ${PIPESTATUS[0]}"
 
       - name: Collect .ipk artifacts
         id: collect
@@ -109,17 +117,21 @@ jobs:
           SDK_DIR="${{ steps.sdk.outputs.sdk_dir }}"
           mkdir -p output
 
-          echo "Searching for .ipk files in ${SDK_DIR}/bin/ ..."
-          find "${SDK_DIR}/bin" -name '*.ipk' -newer "${SDK_DIR}/package/${PACKAGE_NAME}" -exec cp -v {} output/ \;
+          echo "Searching for .ipk files in ${SDK_DIR} ..."
+          # Find all .ipk files matching our package name anywhere in the SDK tree
+          find "${SDK_DIR}/bin" -name '*er6p*' -name '*.ipk' -exec cp -v {} output/ \; 2>/dev/null || true
+          find "${SDK_DIR}/bin" -name '*kmod-er6p*' -name '*.ipk' -exec cp -v {} output/ \; 2>/dev/null || true
 
-          # Also check the packages/ directory inside bin/
-          find "${SDK_DIR}/bin/packages" -name "*${PACKAGE_NAME}*" -name '*.ipk' -exec cp -v {} output/ \;
-
-          # Fallback: grab any .ipk that mentions er6p or was built recently
+          # Broader: find any .ipk newer than our package link
           if [ -z "$(ls output/*.ipk 2>/dev/null)" ]; then
-            echo "No ipks found via primary search, trying broader search..."
-            find "${SDK_DIR}/bin" -name "*${PACKAGE_NAME}*" -exec cp -v {} output/ \;
+            echo "No er6p ipks found, searching all recent .ipk files..."
+            find "${SDK_DIR}/bin" -name '*.ipk' -newer "${SDK_DIR}/package/${PACKAGE_NAME}" -exec cp -v {} output/ \; 2>/dev/null || true
           fi
+
+          # Last resort: check if the .ko was built (kernel module compile succeeded but packaging failed)
+          echo ""
+          echo "=== Kernel module check ==="
+          find "${SDK_DIR}/build_dir" -name 'er6p-poe.ko' 2>/dev/null || echo "(no .ko found)"
 
           echo ""
           echo "=== Built packages ==="
@@ -130,6 +142,9 @@ jobs:
 
           if [ "${IPK_COUNT}" -eq 0 ]; then
             echo "::warning::No .ipk files found — build may have failed"
+            echo ""
+            echo "=== Build log tail ==="
+            tail -30 "${SDK_DIR}/build.log" 2>/dev/null || echo "(no build log)"
           fi
 
       - name: Upload .ipk artifacts
