@@ -279,6 +279,17 @@ define Package/prometheus-node-exporter-lua-nft-counters/install
 	$(INSTALL_DATA) ./files/usr/lib/lua/prometheus-collectors/nft_counters.lua $(1)/usr/lib/lua/prometheus-collectors/
 endef
 
+define Package/prometheus-node-exporter-lua-er6p-poe
+  $(call Package/prometheus-node-exporter-lua/Default)
+  TITLE+= (er6p-poe collector)
+  DEPENDS:=prometheus-node-exporter-lua +er6p-poe
+endef
+
+define Package/prometheus-node-exporter-lua-er6p-poe/install
+	$(INSTALL_DIR) $(1)/usr/lib/lua/prometheus-collectors
+	$(INSTALL_DATA) ./files/usr/lib/lua/prometheus-collectors/er6p_poe.lua $(1)/usr/lib/lua/prometheus-collectors/
+endef
+
 $(eval $(call BuildPackage,prometheus-node-exporter-lua))
 $(eval $(call BuildPackage,prometheus-node-exporter-lua-bmx7))
 $(eval $(call BuildPackage,prometheus-node-exporter-lua-dawn))
@@ -300,3 +311,4 @@ $(eval $(call BuildPackage,prometheus-node-exporter-lua-realtek-poe))
 $(eval $(call BuildPackage,prometheus-node-exporter-lua-mwan3))
 $(eval $(call BuildPackage,prometheus-node-exporter-lua-ethtool))
 $(eval $(call BuildPackage,prometheus-node-exporter-lua-nft-counters))
+$(eval $(call BuildPackage,prometheus-node-exporter-lua-er6p-poe))

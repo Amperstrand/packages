@@ -1,0 +1,182 @@
+name: Build er6p-poe
+
+on:
+  push:
+    branches: [er6p-poe]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      openwrt_version:
+        description: 'OpenWrt release version (e.g. 25.12.4)'
+        required: false
+        default: '25.12.4'
+
+permissions:
+  contents: write
+
+env:
+  OPENWRT_VERSION: ${{ github.event.inputs.openwrt_version || '25.12.4' }}
+  TARGET: octeon
+  SUBTARGET: generic
+  PACKAGE_NAME: er6p-poe
+
+jobs:
+  build:
+    name: Build er6p-poe (octeon SDK)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zstd
+
+      - name: Resolve SDK download URL
+        id: sdk
+        run: |
+          VERSION="${OPENWRT_VERSION}"
+          INDEX="https://downloads.openwrt.org/releases/${VERSION}/targets/${TARGET}/${SUBTARGET}/"
+
+          echo "Fetching ${INDEX} ..."
+          SDK_FILE=$(curl -sL "${INDEX}" | grep -oP 'openwrt-sdk-[^"]+Linux-x86_64\.tar\.zst' | head -1)
+
+          if [ -z "${SDK_FILE}" ]; then
+            echo "::error::No SDK found at ${INDEX} for OpenWrt ${VERSION}"
+            exit 1
+          fi
+
+          SDK_DIR="${SDK_FILE%.tar.zst}"
+          echo "sdk_url=${INDEX}${SDK_FILE}"  >> "$GITHUB_OUTPUT"
+          echo "sdk_file=${SDK_FILE}"          >> "$GITHUB_OUTPUT"
+          echo "sdk_dir=${SDK_DIR}"            >> "$GITHUB_OUTPUT"
+          echo ""
+          echo "SDK : ${SDK_FILE}"
+          echo "URL : ${INDEX}${SDK_FILE}"
+
+      - name: Cache extracted SDK
+        id: cache-sdk
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.sdk.outputs.sdk_dir }}
+          key: sdk-${{ steps.sdk.outputs.sdk_file }}-v1
+
+      - name: Download and extract SDK
+        if: steps.cache-sdk.outputs.cache-hit != 'true'
+        run: |
+          curl -L --progress-bar -o sdk.tar.zst "${{ steps.sdk.outputs.sdk_url }}"
+          zstd -d sdk.tar.zst -o sdk.tar
+          tar xf sdk.tar
+          rm -f sdk.tar sdk.tar.zst
+
+      - name: Update and install feeds
+        if: steps.cache-sdk.outputs.cache-hit != 'true'
+        working-directory: ${{ steps.sdk.outputs.sdk_dir }}
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Verify package directory exists
+        run: |
+          PKG_DIR="${{ github.workspace }}/net/${PACKAGE_NAME}"
+          if [ ! -d "${PKG_DIR}" ]; then
+            echo "::error::Package directory not found: ${PKG_DIR}"
+            echo "Expected net/${PACKAGE_NAME}/ with an OpenWrt Makefile"
+            exit 1
+          fi
+          echo "Package found at ${PKG_DIR}"
+          ls -la "${PKG_DIR}/"
+
+      - name: Link package into SDK
+        run: |
+          SDK_DIR="${{ steps.sdk.outputs.sdk_dir }}"
+          ln -sfn "${{ github.workspace }}/net/${PACKAGE_NAME}" "${SDK_DIR}/package/${PACKAGE_NAME}"
+          echo "Linked net/${PACKAGE_NAME} -> ${SDK_DIR}/package/${PACKAGE_NAME}"
+
+      - name: Build package
+        id: compile
+        working-directory: ${{ steps.sdk.outputs.sdk_dir }}
+        run: |
+          make "package/${PACKAGE_NAME}/compile" V=s 2>&1 | tee build.log
+          echo "Build exited with code ${PIPESTATUS[0]}"
+
+      - name: Collect .ipk artifacts
+        id: collect
+        if: always()
+        run: |
+          SDK_DIR="${{ steps.sdk.outputs.sdk_dir }}"
+          mkdir -p output
+
+          echo "Searching for .ipk files in ${SDK_DIR}/bin/ ..."
+          find "${SDK_DIR}/bin" -name '*.ipk' -newer "${SDK_DIR}/package/${PACKAGE_NAME}" -exec cp -v {} output/ \;
+
+          # Also check the packages/ directory inside bin/
+          find "${SDK_DIR}/bin/packages" -name "*${PACKAGE_NAME}*" -name '*.ipk' -exec cp -v {} output/ \;
+
+          # Fallback: grab any .ipk that mentions er6p or was built recently
+          if [ -z "$(ls output/*.ipk 2>/dev/null)" ]; then
+            echo "No ipks found via primary search, trying broader search..."
+            find "${SDK_DIR}/bin" -name "*${PACKAGE_NAME}*" -exec cp -v {} output/ \;
+          fi
+
+          echo ""
+          echo "=== Built packages ==="
+          ls -la output/ 2>/dev/null || echo "(no files)"
+
+          IPK_COUNT=$(find output/ -maxdepth 1 -name '*.ipk' | wc -l | tr -d ' ')
+          echo "ipk_count=${IPK_COUNT}" >> "$GITHUB_OUTPUT"
+
+          if [ "${IPK_COUNT}" -eq 0 ]; then
+            echo "::warning::No .ipk files found — build may have failed"
+          fi
+
+      - name: Upload .ipk artifacts
+        if: steps.collect.outputs.ipk_count > 0
+        uses: actions/upload-artifact@v4
+        with:
+          name: er6p-poe-openwrt-${{ env.OPENWRT_VERSION }}
+          path: output/*.ipk
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Upload to GitHub Release
+        if: >-
+          startsWith(github.ref, 'refs/tags/v') &&
+          steps.collect.outputs.ipk_count > 0
+        uses: softprops/action-gh-release@v2
+        with:
+          files: output/*.ipk
+          generate_release_notes: true
+
+      - name: Job summary
+        if: always()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## er6p-poe Build Results
+
+          | Setting | Value |
+          |---------|-------|
+          | OpenWrt | \`${OPENWRT_VERSION}\` |
+          | Target  | \`${TARGET}/${SUBTARGET}\` |
+          | SDK     | \`${{ steps.sdk.outputs.sdk_file }}\` |
+          | Packages built | ${{ steps.collect.outputs.ipk_count }} |
+          | Cache hit | \`${{ steps.cache-sdk.outputs.cache-hit }}\` |
+
+          ### Built packages
+          \`\`\`
+          $(ls output/*.ipk 2>/dev/null | xargs -rn1 basename || echo '(none)')
+          \`\`\`
+
+          ### Install on EdgeRouter 6P
+          \`\`\`bash
+          # 1. Download .ipk from workflow artifacts (or release assets for tagged builds)
+          # 2. Copy to router:
+          scp kmod-er6p-poe*.ipk root@192.168.1.1:/tmp/
+          # 3. Install:
+          ssh root@192.168.1.1 'opkg install /tmp/kmod-er6p-poe*.ipk'
+          # 4. Load the module:
+          ssh root@192.168.1.1 'insmod er6p-poe || modprobe er6p-poe'
+          \`\`\`
+          EOF
