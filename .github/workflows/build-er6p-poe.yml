@@ -110,25 +110,17 @@ jobs:
           set -o pipefail
           make "package/${PACKAGE_NAME}/compile" V=s 2>&1 | tee build.log
 
-      - name: Collect .ipk artifacts
+      - name: Collect built packages
         id: collect
         if: always()
         run: |
           SDK_DIR="${{ steps.sdk.outputs.sdk_dir }}"
           mkdir -p output
 
-          echo "Searching for .ipk files in ${SDK_DIR} ..."
-          # Find all .ipk files matching our package name anywhere in the SDK tree
-          find "${SDK_DIR}/bin" -name '*er6p*' -name '*.ipk' -exec cp -v {} output/ \; 2>/dev/null || true
-          find "${SDK_DIR}/bin" -name '*kmod-er6p*' -name '*.ipk' -exec cp -v {} output/ \; 2>/dev/null || true
+          echo "Searching for er6p-poe packages in ${SDK_DIR}/bin/ ..."
+          # OpenWrt 25.x produces .apk files (not .ipk)
+          find "${SDK_DIR}/bin" \( -name '*er6p*' -o -name '*kmod-er6p*' \) \( -name '*.apk' -o -name '*.ipk' \) -exec cp -v {} output/ \; 2>/dev/null || true
 
-          # Broader: find any .ipk newer than our package link
-          if [ -z "$(ls output/*.ipk 2>/dev/null)" ]; then
-            echo "No er6p ipks found, searching all recent .ipk files..."
-            find "${SDK_DIR}/bin" -name '*.ipk' -newer "${SDK_DIR}/package/${PACKAGE_NAME}" -exec cp -v {} output/ \; 2>/dev/null || true
-          fi
-
-          # Last resort: check if the .ko was built (kernel module compile succeeded but packaging failed)
           echo ""
           echo "=== Kernel module check ==="
           find "${SDK_DIR}/build_dir" -name 'er6p-poe.ko' 2>/dev/null || echo "(no .ko found)"
@@ -137,32 +129,32 @@ jobs:
           echo "=== Built packages ==="
           ls -la output/ 2>/dev/null || echo "(no files)"
 
-          IPK_COUNT=$(find output/ -maxdepth 1 -name '*.ipk' | wc -l | tr -d ' ')
-          echo "ipk_count=${IPK_COUNT}" >> "$GITHUB_OUTPUT"
+          PKG_COUNT=$(find output/ -maxdepth 1 \( -name '*.apk' -o -name '*.ipk' \) | wc -l | tr -d ' ')
+          echo "pkg_count=${PKG_COUNT}" >> "$GITHUB_OUTPUT"
 
-          if [ "${IPK_COUNT}" -eq 0 ]; then
-            echo "::warning::No .ipk files found — build may have failed"
+          if [ "${PKG_COUNT}" -eq 0 ]; then
+            echo "::warning::No .apk/.ipk files found — build may have failed"
             echo ""
             echo "=== Build log tail ==="
             tail -30 "${SDK_DIR}/build.log" 2>/dev/null || echo "(no build log)"
           fi
 
-      - name: Upload .ipk artifacts
-        if: steps.collect.outputs.ipk_count > 0
+      - name: Upload packages
+        if: steps.collect.outputs.pkg_count > 0
         uses: actions/upload-artifact@v4
         with:
           name: er6p-poe-openwrt-${{ env.OPENWRT_VERSION }}
-          path: output/*.ipk
+          path: output/*
           retention-days: 90
           if-no-files-found: error
 
       - name: Upload to GitHub Release
         if: >-
           startsWith(github.ref, 'refs/tags/v') &&
-          steps.collect.outputs.ipk_count > 0
+          steps.collect.outputs.pkg_count > 0
         uses: softprops/action-gh-release@v2
         with:
-          files: output/*.ipk
+          files: output/*
           generate_release_notes: true
 
       - name: Job summary
@@ -176,22 +168,20 @@ jobs:
           | OpenWrt | \`${OPENWRT_VERSION}\` |
           | Target  | \`${TARGET}/${SUBTARGET}\` |
           | SDK     | \`${{ steps.sdk.outputs.sdk_file }}\` |
-          | Packages built | ${{ steps.collect.outputs.ipk_count }} |
+          | Packages built | ${{ steps.collect.outputs.pkg_count }} |
           | Cache hit | \`${{ steps.cache-sdk.outputs.cache-hit }}\` |
 
           ### Built packages
           \`\`\`
-          $(ls output/*.ipk 2>/dev/null | xargs -rn1 basename || echo '(none)')
+          $(ls output/*.apk output/*.ipk 2>/dev/null | xargs -rn1 basename || echo '(none)')
           \`\`\`
 
           ### Install on EdgeRouter 6P
           \`\`\`bash
-          # 1. Download .ipk from workflow artifacts (or release assets for tagged builds)
+          # 1. Download .apk from workflow artifacts (or release assets for tagged builds)
           # 2. Copy to router:
-          scp kmod-er6p-poe*.ipk root@192.168.1.1:/tmp/
+          scp kmod-er6p-poe*.apk er6p-poe*.apk root@192.168.1.1:/tmp/
           # 3. Install:
-          ssh root@192.168.1.1 'opkg install /tmp/kmod-er6p-poe*.ipk'
-          # 4. Load the module:
-          ssh root@192.168.1.1 'insmod er6p-poe || modprobe er6p-poe'
+          ssh root@192.168.1.1 'apk add /tmp/kmod-er6p-poe*.apk /tmp/er6p-poe*.apk'
           \`\`\`
           EOF
