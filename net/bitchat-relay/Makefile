@@ -30,7 +30,7 @@ define Package/bitchat-relay
   SUBMENU:=Bluetooth
   TITLE:=BitChat BLE mesh relay client
   URL:=https://github.com/russellballestrini/bitchat-linux
-  DEPENDS:=+bluez-daemon +bluez-utils +dbus +libbasu +libopenssl3 +zlib +libpthread +librt
+  DEPENDS:=+bluez-daemon +bluez-utils +dbus +libbasu +libopenssl +zlib +libpthread +librt
 endef
 
 define Package/bitchat-relay/description
