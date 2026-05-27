@@ -15,10 +15,6 @@ jobs:
         include:
           - arch: arm_cortex-a7_neon-vfpv4
             target: ipq40xx-generic
-          - arch: arm_cortex-a15_neon-vfpv4
-            target: armsr-armv7
-          - arch: x86_64
-            target: x86-64
 
     steps:
       - name: Remove unused software
