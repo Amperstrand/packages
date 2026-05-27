@@ -51,13 +51,12 @@ endef
 define Build/Compile
 	$(MAKE) -C $(PKG_BUILD_DIR) \
 		CC="$(TARGET_CC)" \
-		CFLAGS="$(TARGET_CFLAGS) $(TARGET_CPPFLAGS) \
+		CFLAGS="$(TARGET_CFLAGS) -ffunction-sections -fdata-sections" \
+		CPPFLAGS="-Iinclude -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
 			-I$(STAGING_DIR)/usr/include \
-			-ffunction-sections -fdata-sections \
-			-D_GNU_SOURCE" \
-		LDFLAGS="$(TARGET_LDFLAGS) -L$(STAGING_DIR)/usr/lib \
-			-Wl,--gc-sections" \
-		LDLIBS_CORE="-lz -lbasu -lcrypto -lpthread -lrt" \
+			$(TARGET_CPPFLAGS)" \
+		LDFLAGS="$(TARGET_LDFLAGS) -Wl,--gc-sections" \
+		LDLIBS_CORE="-lz -lbasu -lcrypto -lssl -lpthread -lrt" \
 		LDLIBS_BLE="" \
 		BIN=bitchat-relay \
 		bitchat-relay
