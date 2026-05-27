@@ -14,7 +14,7 @@ PKG_RELEASE:=1
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/russellballestrini/bitchat-linux.git
 PKG_SOURCE_VERSION:=f78e9766cbe9f908850ef36b9fb4db13ec03fc3d
-PKG_MIRROR_HASH:=c614274d1ce8c7f62a24e98b8ebc7d1b1a4ecae18b87f03f7a74f63dc498e49c
+PKG_MIRROR_HASH:=08a2fcd5eec15a2b822149d5dda2f492f5c288797b52f11f06748bd0b4a7db33
 
 PKG_MAINTAINER:=Amperstrand
 PKG_LICENSE:=Public-Domain
