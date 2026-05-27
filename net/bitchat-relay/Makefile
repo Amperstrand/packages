@@ -21,7 +21,6 @@ PKG_LICENSE:=Public-Domain
 PKG_LICENSE_FILES:=LICENSE
 
 PKG_BUILD_FLAGS:=gc-sections
-PKG_BUILD_DEPENDS:=basu/host
 
 include $(INCLUDE_DIR)/package.mk
 

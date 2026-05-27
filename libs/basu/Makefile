@@ -43,10 +43,12 @@ MESON_ARGS += \
 	-Daudit=false
 
 define Build/InstallDev
+	$(INSTALL_DIR) $(1)/usr/include/basu
 	$(INSTALL_DIR) $(1)/usr/include/systemd
 	$(INSTALL_DIR) $(1)/usr/lib
 	$(INSTALL_DIR) $(1)/usr/lib/pkgconfig
-	$(CP) $(PKG_INSTALL_DIR)/usr/include/systemd/*.h $(1)/usr/include/systemd/
+	$(CP) $(PKG_INSTALL_DIR)/usr/include/basu/*.h $(1)/usr/include/basu/
+	$(CP) $(PKG_INSTALL_DIR)/usr/include/basu/*.h $(1)/usr/include/systemd/
 	$(CP) $(PKG_INSTALL_DIR)/usr/lib/libbasu.so* $(1)/usr/lib/
 	$(CP) $(PKG_INSTALL_DIR)/usr/lib/pkgconfig/basu.pc $(1)/usr/lib/pkgconfig/ 2>/dev/null || true
 endef
