@@ -1,0 +1,69 @@
+name: Build bitchat-relay ipk
+
+on:
+  push:
+    branches: [feature/bitchat-relay]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build for ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm_cortex-a7_neon-vfpv4
+            target: ipq40xx-generic
+          - arch: arm_cortex-a15_neon-vfpv4
+            target: armsr-armv7
+          - arch: x86_64
+            target: x86-64
+
+    steps:
+      - name: Remove unused software
+        run: |
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/local/.ghcup
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/share/swift
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine branch
+        run: |
+          BRANCH="openwrt-24.10"
+          echo "Building for $BRANCH"
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+
+      - name: Build packages
+        uses: openwrt/gh-action-sdk@v11
+        env:
+          ARCH: ${{ matrix.arch }}-${{ env.BRANCH }}
+          FEEDNAME: packages_ci
+          INDEX: 1
+          V: s
+          PACKAGES: basu bitchat-relay
+
+      - name: Move packages to project dir
+        if: always()
+        run: cp -v bin/packages/${{ matrix.arch }}/packages_ci/* . || true
+
+      - name: Store packages
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.arch }}-bitchat-relay-packages
+          path: |
+            *.ipk
+            Packages
+            Packages.*
+
+      - name: Store logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.arch }}-build-logs
+          path: logs/

@@ -1,0 +1,29 @@
+--- a/Makefile
++++ b/Makefile
+@@ -17,10 +17,10 @@
+ CC       ?= cc
+ CFLAGS   ?= -O2 -g -Wall -Wextra -Wpedantic -std=c11
+-CPPFLAGS += -Iinclude -D_POSIX_C_SOURCE=200809L $(shell pkg-config --cflags libsystemd openssl)
++CPPFLAGS += -Iinclude -D_POSIX_C_SOURCE=200809L $(shell pkg-config --cflags openssl)
+ LDLIBS_CORE := -lz $(shell pkg-config --libs openssl)
+-LDLIBS_BLE  := $(shell pkg-config --libs libsystemd)
++LDLIBS_BLE  :=
+ LDLIBS      := $(LDLIBS_CORE) $(LDLIBS_BLE)
+ 
+ BIN      := bitchat-linux
+@@ -35,7 +35,12 @@
+ PREFIX   ?= /usr/local
+ BINDIR   ?= $(PREFIX)/bin
+ 
++.PHONY: all clean install test unit integration functional functional-mock functional-mesh self-test \
++        deps deps-apt deps-dnf deps-pacman deps-zypper \
++        ble-le-only ble-le-only-restore ble-restart ble-status \
++        ble-permanent-le ble-permanent-dual ble-permanent-status
++
+ all: $(BIN)
+ 
+-$(BIN): $(OBJS)
+-	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
++# Allow overriding BIN name for the OpenWrt package
++$(BIN): $(OBJS)
++	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS) $(LDLIBS_CORE)

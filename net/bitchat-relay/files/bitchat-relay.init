@@ -1,0 +1,84 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2025 Amperstrand
+# BitChat BLE mesh relay procd service
+
+START=99
+STOP=10
+USE_PROCD=1
+PROG=/usr/sbin/bitchat-relay
+
+validate_section() {
+	uci_load_validate bitchat-relay bitchat-relay "$1" "$2" \
+		'enabled:bool:0' \
+		'nickname:string:bitchat-relay' \
+		'mode:string:chat' \
+		'testnet:bool:0' \
+		'adapter:string:' \
+		'log_level:string:warn' \
+		'identity_dir:string:/etc/bitchat-relay'
+}
+
+start_service() {
+	local enabled nickname mode testnet adapter log_level identity_dir
+
+	validate_section "bitchat-relay" || {
+		echo "Validation failed"
+		return 1
+	}
+
+	[ "$enabled" -eq "1" ] || {
+		echo "bitchat-relay is disabled. Set enabled=1 in /etc/config/bitchat-relay"
+		return 0
+	}
+
+	# Ensure dbus and bluetooth are available
+	[ -S /var/run/dbus/system_bus_socket ] || {
+		echo "D-Bus system bus not found. Starting dbus."
+		/etc/init.d/dbus start
+		sleep 1
+	}
+
+	hciconfig hci0 up 2>/dev/null
+
+	# Build command line
+	local args=""
+
+	case "$mode" in
+		listen)
+			args="--listen"
+			;;
+		chat)
+			args="--chat --nick $nickname"
+			;;
+		announce)
+			args="--announce --nick $nickname"
+			;;
+		*)
+			args="--chat --nick $nickname"
+			;;
+	esac
+
+	[ "$testnet" -eq "1" ] && args="$args --testnet"
+	[ -n "$adapter" ] && args="$args --adapter $adapter"
+
+	# Set identity directory
+	export XDG_CONFIG_HOME="$identity_dir"
+	mkdir -p "$identity_dir/bitchat-linux"
+
+	procd_open_instance bitchat-relay
+	procd_set_param command $PROG $args
+	procd_set_param stderr 1
+	procd_set_param stdout 1
+	procd_set_param respawn 3600 5 5
+	procd_set_param pidfile /var/run/bitchat-relay.pid
+	procd_close_instance
+}
+
+stop_service() {
+	procd_kill bitchat-relay
+}
+
+service_triggers() {
+	procd_add_validation validate_section
+	procd_add_reload_trigger "bitchat-relay"
+}
