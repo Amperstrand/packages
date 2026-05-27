@@ -31,7 +31,7 @@ define Package/bitchat-relay
   SUBMENU:=Bluetooth
   TITLE:=BitChat BLE mesh relay client
   URL:=https://github.com/russellballestrini/bitchat-linux
-  DEPENDS:=+bluez-daemon +bluez-utils +dbus +libbasu +libopenssl3 +zlib
+  DEPENDS:=+bluez-daemon +bluez-utils +dbus +libbasu +libopenssl3 +zlib +libpthread +librt
 endef
 
 define Package/bitchat-relay/description
@@ -58,7 +58,7 @@ define Build/Compile
 			-D_GNU_SOURCE" \
 		LDFLAGS="$(TARGET_LDFLAGS) -L$(STAGING_DIR)/usr/lib \
 			-Wl,--gc-sections" \
-		LDLIBS_CORE="-lz $(STAGING_DIR)/usr/lib/libbasu.a -lcrypto -lpthread -lrt" \
+		LDLIBS_CORE="-lz -lbasu -lcrypto -lpthread -lrt" \
 		LDLIBS_BLE="" \
 		BIN=bitchat-relay \
 		bitchat-relay
