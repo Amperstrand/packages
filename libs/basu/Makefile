@@ -38,9 +38,7 @@ define Package/libbasu/description
 endef
 
 MESON_ARGS += \
-	-Daudit=false \
-	-Dlibcap=false \
-	-Dtests=false
+	-Daudit=false
 
 define Build/InstallDev
 	$(INSTALL_DIR) $(1)/usr/include/systemd
